@@ -1,0 +1,6 @@
+name: astrbot_plugin_chillchat
+display_name: chillchat聊天记录控制
+description: 上下文字符数裁剪插件，检测历史记录字符数，超限自动裁剪，支持白名单用户
+author: 柯尔
+version: 1.0.0
+repo: ""
