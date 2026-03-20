@@ -1,27 +1,63 @@
 {
-    "max_chars": {
-        "description": "历史记录最大字符数",
-        "type": "int",
-        "hint": "历史记录超过此字符数时，从最旧的消息开始裁剪",
-        "default": 8000
+    "basic_settings": {
+        "description": "基础设置",
+        "type": "object",
+        "items": {
+            "max_chars": {
+                "description": "默认最大字符数",
+                "type": "int",
+                "hint": "所有未分配到VIP档位的用户/群适用此上限。字符数=每个汉字、字母、标点各算1",
+                "default": 8000
+            },
+            "apply_to": {
+                "description": "生效范围",
+                "type": "string",
+                "options": ["private", "group", "all"],
+                "hint": "private=仅私聊，group=仅群聊，all=全部",
+                "default": "private"
+            }
+        }
     },
-    "apply_to": {
-        "description": "生效范围",
-        "type": "string",
-        "options": ["private", "group", "all"],
-        "hint": "private=仅私聊，group=仅群聊，all=全部",
-        "default": "private"
+    "vip_settings": {
+        "description": "VIP用户设置（享受更高上下文上限）",
+        "type": "object",
+        "items": {
+            "vip_max_chars": {
+                "description": "VIP最大字符数",
+                "type": "int",
+                "hint": "VIP档位上限，设为0表示不启用VIP档",
+                "default": 0
+            },
+            "vip_users": {
+                "description": "VIP用户列表",
+                "type": "list",
+                "hint": "享受VIP上限的用户ID列表",
+                "default": []
+            },
+            "vip_groups": {
+                "description": "VIP群聊列表",
+                "type": "list",
+                "hint": "享受VIP上限的群聊ID列表",
+                "default": []
+            }
+        }
     },
-    "whitelist_users": {
-        "description": "白名单用户",
-        "type": "list",
-        "hint": "白名单用户的ID列表，这些用户不会被裁剪历史记录",
-        "default": []
-    },
-    "whitelist_groups": {
-        "description": "白名单群聊",
-        "type": "list",
-        "hint": "白名单群聊的ID列表，这些群聊不会被裁剪历史记录",
-        "default": []
+    "whitelist_settings": {
+        "description": "白名单设置（完全不裁剪）",
+        "type": "object",
+        "items": {
+            "whitelist_users": {
+                "description": "白名单用户",
+                "type": "list",
+                "hint": "这些用户的历史记录完全不裁剪",
+                "default": []
+            },
+            "whitelist_groups": {
+                "description": "白名单群聊",
+                "type": "list",
+                "hint": "这些群聊的历史记录完全不裁剪",
+                "default": []
+            }
+        }
     }
 }
