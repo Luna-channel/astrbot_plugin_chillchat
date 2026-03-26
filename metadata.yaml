@@ -2,5 +2,5 @@ name: astrbot_plugin_chillchat
 display_name: chillchat聊天记录控制
 description: 上下文字符数裁剪插件，支持多档位上限（默认/二档/三档），不同用户/群可分配不同上下文长度
 author: 柯尔
-version: 1.1.0
+version: 1.1.1
 repo: https://github.com/Luna-channel/astrbot_plugin_chillchat

@@ -5,7 +5,7 @@ from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, register
 
 
-@register("chillchat", "柯尔", "上下文字符数裁剪插件（多档位）", "1.1.0")
+@register("chillchat", "柯尔", "上下文字符数裁剪插件（多档位）", "1.1.1")
 class ChillChat(Star):
     def __init__(self, context: Context, config: dict):
         super().__init__(context, config)
@@ -87,9 +87,26 @@ class ChillChat(Star):
             # 裁剪历史记录，保留至少最新的一条
             original_count = len(request.contexts)
             while total_chars > effective_max and len(request.contexts) > 1:
-                request.contexts.pop(0)
+                removed = request.contexts.pop(0)
+                # 如果删除的是带 tool_calls 的 assistant 消息，
+                # 必须同时删除紧跟其后的所有 tool 响应消息，避免孤立
+                if (isinstance(removed, dict)
+                        and removed.get("role") == "assistant"
+                        and removed.get("tool_calls")):
+                    while (request.contexts
+                           and isinstance(request.contexts[0], dict)
+                           and request.contexts[0].get("role") == "tool"
+                           and len(request.contexts) > 1):
+                        request.contexts.pop(0)
                 total_chars = self._calc_context_chars(request.contexts)
             
+            # 清理开头残留的孤立 tool 消息（没有对应的 assistant）
+            while (len(request.contexts) > 1
+                   and isinstance(request.contexts[0], dict)
+                   and request.contexts[0].get("role") == "tool"):
+                request.contexts.pop(0)
+            
+            total_chars = self._calc_context_chars(request.contexts)
             trimmed_count = original_count - len(request.contexts)
             if trimmed_count > 0:
                 logger.info(
