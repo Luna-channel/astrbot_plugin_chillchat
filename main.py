@@ -1,6 +1,5 @@
-from astrbot import logger
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.event.filter import on_llm_request
+from astrbot.api import logger
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, register
 
@@ -46,66 +45,54 @@ class ChillChat(Star):
             return False
         return str(id_value).strip() in whitelist
 
-    @on_llm_request()
+    @filter.on_llm_request()
     async def trim_context(self, event: AstrMessageEvent, request: ProviderRequest):
         """在LLM请求前检测历史记录字符数，超限则裁剪"""
         try:
             # 安全检查：contexts 必须存在且为列表
             if not request.contexts or not isinstance(request.contexts, list):
                 return
-            
+
             is_private = event.is_private_chat()
-            
+
             # 检查生效范围
             if self.apply_to == "private" and not is_private:
                 return
             if self.apply_to == "group" and is_private:
                 return
-            
+
             # 获取身份信息
             sender_id = event.get_sender_id()
             group_id = None if is_private else event.get_group_id()
-            
+
             # 检查白名单用户
             if self._in_whitelist(sender_id, self.whitelist_users):
                 return
-            
+
             # 检查白名单群聊
             if group_id and self._in_whitelist(group_id, self.whitelist_groups):
                 return
-            
-            # 确定该用户/群适用的档位上限（优先级：三档 > 二档 > 默认）
+
+            # 确定该用户/群适用的档位上限（优先级：VIP > 默认）
             effective_max = self._resolve_tier(sender_id, group_id)
-            
+
             # 计算历史记录总字符数
             total_chars = self._calc_context_chars(request.contexts)
-            
+
             # 如果未超限，直接返回
             if total_chars <= effective_max:
                 return
-            
-            # 裁剪历史记录，保留至少最新的一条
+
+            # 裁剪历史记录：从最旧的消息开始移除，保留至少一条
             original_count = len(request.contexts)
             while total_chars > effective_max and len(request.contexts) > 1:
-                removed = request.contexts.pop(0)
-                # 如果删除的是带 tool_calls 的 assistant 消息，
-                # 必须同时删除紧跟其后的所有 tool 响应消息，避免孤立
-                if (isinstance(removed, dict)
-                        and removed.get("role") == "assistant"
-                        and removed.get("tool_calls")):
-                    while (request.contexts
-                           and isinstance(request.contexts[0], dict)
-                           and request.contexts[0].get("role") == "tool"
-                           and len(request.contexts) > 1):
-                        request.contexts.pop(0)
-                total_chars = self._calc_context_chars(request.contexts)
-            
-            # 清理开头残留的孤立 tool 消息（没有对应的 assistant）
-            while (len(request.contexts) > 1
-                   and isinstance(request.contexts[0], dict)
-                   and request.contexts[0].get("role") == "tool"):
                 request.contexts.pop(0)
-            
+                total_chars = self._calc_context_chars(request.contexts)
+
+            # 修复裁剪后可能产生的非法消息序列
+            # （孤儿 tool、开头非 user、不完整的 tool_calls 配对等）
+            request.contexts = self._fix_contexts(request.contexts)
+
             total_chars = self._calc_context_chars(request.contexts)
             trimmed_count = original_count - len(request.contexts)
             if trimmed_count > 0:
@@ -142,3 +129,60 @@ class ChillChat(Star):
                     if isinstance(item, dict) and item.get("type") == "text":
                         total += len(str(item.get("text", "")))
         return total
+
+    def _fix_contexts(self, contexts: list) -> list:
+        """修复裁剪后的上下文列表，确保符合 LLM API 要求。
+
+        1. 确保首条消息是 user 角色（跳过开头的孤儿 tool / 落单 assistant）
+        2. 确保 assistant(tool_calls) 与 tool 响应配对完整，丢弃不完整的配对
+        """
+        if not contexts:
+            return contexts
+
+        # --- 第一步：跳过开头所有非 user 的消息 ---
+        start = 0
+        for i, msg in enumerate(contexts):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                start = i
+                break
+        else:
+            # 整个列表里没有 user 消息，返回空列表
+            return []
+
+        trimmed = contexts[start:]
+
+        # --- 第二步：确保 tool 配对完整 ---
+        fixed: list = []
+        pending_assistant: dict | None = None
+        pending_tools: list = []
+
+        def flush():
+            nonlocal pending_assistant, pending_tools
+            if pending_assistant is not None and pending_tools:
+                fixed.append(pending_assistant)
+                fixed.extend(pending_tools)
+            pending_assistant = None
+            pending_tools = []
+
+        for msg in trimmed:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+
+            if role == "tool":
+                if pending_assistant is not None:
+                    pending_tools.append(msg)
+                # 没有 pending_assistant 的孤儿 tool 直接丢弃
+                continue
+
+            if role == "assistant" and msg.get("tool_calls"):
+                flush()
+                pending_assistant = msg
+                continue
+
+            # 普通消息（user / 无 tool_calls 的 assistant）
+            flush()
+            fixed.append(msg)
+
+        flush()
+        return fixed
