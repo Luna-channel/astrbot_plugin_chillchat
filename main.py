@@ -4,7 +4,7 @@ from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, register
 
 
-@register("chillchat", "柯尔", "上下文字符数裁剪插件（多档位）", "1.1.1")
+@register("chillchat", "柯尔", "上下文字符数裁剪插件（多档位）", "1.1.2")
 class ChillChat(Star):
     def __init__(self, context: Context, config: dict):
         super().__init__(context, config)
@@ -46,7 +46,13 @@ class ChillChat(Star):
         return str(id_value).strip() in whitelist
 
     @filter.on_llm_request()
-    async def trim_context(self, event: AstrMessageEvent, request: ProviderRequest):
+    async def trim_context(
+        self,
+        event: AstrMessageEvent,
+        request: ProviderRequest,
+        *args,
+        **kwargs,
+    ):
         """在LLM请求前检测历史记录字符数，超限则裁剪"""
         try:
             # 安全检查：contexts 必须存在且为列表
